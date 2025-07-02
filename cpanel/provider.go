@@ -13,8 +13,6 @@ import (
 func Provider() *schema.Provider {
 	return &schema.Provider{
 		ResourcesMap: map[string]*schema.Resource{
-			//"cpanel_domain":      resourceDomain(),
-			//"cpanel_subdomain":   resourceSubdomain(),
 			"cpanel_zone_record": resourceZoneRecord(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{},
@@ -43,13 +41,13 @@ func Provider() *schema.Provider {
 				Optional:    true,
 				Default:     2083,
 				DefaultFunc: schema.EnvDefaultFunc("CPANEL_PORT", 2083),
-				Description: "Porta da API do cPanel (padrão: 2083 para HTTPS)",
+				Description: "The port to connect to cPanel, default is 2083 for SSL.",
 			},
 			"insecure": {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Default:     false,
-				Description: "Ignorar verificação SSL",
+				Description: "If true, skips TLS verification for self-signed certificates.",
 			},
 		},
 		ConfigureFunc: providerConfigure,
@@ -67,13 +65,11 @@ type cPanelClient struct {
 
 func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 	httpClient := &http.Client{}
-
 	if d.Get("insecure").(bool) {
 		httpClient.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 	}
-
 	client := &cPanelClient{
 		host:      d.Get("host").(string),
 		username:  d.Get("username").(string),
@@ -82,17 +78,20 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 		insecure:  d.Get("insecure").(bool),
 		client:    httpClient,
 	}
-
 	if err := client.testConnection(); err != nil {
 		return nil, fmt.Errorf("erro ao conectar ao cPanel: %s", err)
 	}
-
 	return client, nil
 }
 
+//	func (c *cPanelClient) testConnection() error {
+//		_, err := c.callAPI2("ZoneEdit", "fetchzone_records", map[string]string{"domain": "example.com"})
+//		return err
+//	}
+//
 // testConnection validates that the credentials work by fetching the cPanel version
 func (c *cPanelClient) testConnection() error {
-	_, err := c.callAPI("SystemInfo", "getversion", nil)
+	_, err := c.callAPI("DomainInfo", "list_domains", nil)
 	return err
 }
 

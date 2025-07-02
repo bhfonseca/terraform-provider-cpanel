@@ -15,13 +15,14 @@ func resourceZoneRecord() *schema.Resource {
 		Delete: resourceZoneRecordDelete,
 		Schema: map[string]*schema.Schema{
 			"zone":    {Type: schema.TypeString, Required: true, ForceNew: true},
-			"name":    {Type: schema.TypeString, Required: true, ForceNew: true, Description: "@ for apex or host"},
+			"name":    {Type: schema.TypeString, Required: true, ForceNew: true, Description: "@ para raiz ou hostname sem o domínio"},
 			"address": {Type: schema.TypeString, Required: true},
 			"ttl":     {Type: schema.TypeInt, Optional: true, Default: 14400},
 		},
 	}
 }
 
+// Helper to build FQDN
 func fqdn(name, zone string) string {
 	if name == "@" || name == zone {
 		return zone
@@ -32,6 +33,7 @@ func fqdn(name, zone string) string {
 	return name + "." + zone
 }
 
+// Create
 func resourceZoneRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
 	zone := d.Get("zone").(string)
@@ -39,15 +41,28 @@ func resourceZoneRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	addr := d.Get("address").(string)
 	ttl := strconv.Itoa(d.Get("ttl").(int))
 
-	res, err := c.callAPI("ZoneEdit", "add_zone_record", map[string]string{"domain": zone, "name": host, "type": "A", "address": addr, "ttl": ttl})
+	res, err := c.callAPI2("ZoneEdit", "add_zone_record", map[string]string{
+		"domain":  zone,
+		"name":    host,
+		"type":    "A",
+		"address": addr,
+		"ttl":     ttl,
+	})
 	if err != nil {
 		return err
 	}
-	line := int(res["data"].(map[string]interface{})["line"].(float64))
+
+	cp := res["cpanelresult"].(map[string]interface{})
+	dataArr := cp["data"].([]interface{})
+	if len(dataArr) == 0 {
+		return fmt.Errorf("add_zone_record returned empty data")
+	}
+	line := int(dataArr[0].(map[string]interface{})["line"].(float64))
 	d.SetId(fmt.Sprintf("%s:%d", zone, line))
 	return resourceZoneRecordRead(d, meta)
 }
 
+// Helpers
 func parseZoneRecordID(id string) (zone string, line int, err error) {
 	parts := strings.Split(id, ":")
 	if len(parts) != 2 {
@@ -60,25 +75,32 @@ func parseZoneRecordID(id string) (zone string, line int, err error) {
 	return parts[0], l, nil
 }
 
+// Read
 func resourceZoneRecordRead(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
 	zone, line, err := parseZoneRecordID(d.Id())
 	if err != nil {
 		return err
 	}
-	res, err := c.callAPI("ZoneEdit", "fetchzone_records", map[string]string{"domain": zone, "line": strconv.Itoa(line)})
+	res, err := c.callAPI2("ZoneEdit", "fetchzone_records", map[string]string{
+		"domain": zone,
+		"line":   strconv.Itoa(line),
+	})
 	if err != nil {
 		return err
 	}
-	records := res["data"].([]interface{})
-	if len(records) == 0 {
+	cp := res["cpanelresult"].(map[string]interface{})
+	dataArr := cp["data"].([]interface{})
+	if len(dataArr) == 0 {
 		d.SetId("")
 		return nil
 	}
 
-	rec := records[0].(map[string]interface{})
-	d.Set("address", rec["record"].(string))
-	d.Set("ttl", int(rec["ttl"].(float64)))
+	rec := dataArr[0].(map[string]interface{})
+	d.Set("address", rec["address"].(string))
+	if ttl, ok := rec["ttl"].(float64); ok {
+		d.Set("ttl", int(ttl))
+	}
 	return nil
 }
 
@@ -91,10 +113,19 @@ func resourceZoneRecordUpdate(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		return err
 	}
-	addr := d.Get("address").(string)
-	ttl := strconv.Itoa(d.Get("ttl").(int))
 
-	_, err = c.callAPI("ZoneEdit", "edit_zone_record", map[string]string{"domain": zone, "line": strconv.Itoa(line), "address": addr, "ttl": ttl})
+	params := map[string]string{
+		"domain": zone,
+		"line":   strconv.Itoa(line),
+	}
+	if d.HasChange("address") {
+		params["address"] = d.Get("address").(string)
+	}
+	if d.HasChange("ttl") {
+		params["ttl"] = strconv.Itoa(d.Get("ttl").(int))
+	}
+
+	_, err = c.callAPI2("ZoneEdit", "edit_zone_record", params)
 	return err
 }
 
@@ -104,7 +135,11 @@ func resourceZoneRecordDelete(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.callAPI("ZoneEdit", "remove_zone_record", map[string]string{"domain": zone, "line": strconv.Itoa(line)})
+
+	_, err = c.callAPI2("ZoneEdit", "remove_zone_record", map[string]string{
+		"domain": zone,
+		"line":   strconv.Itoa(line),
+	})
 	if err == nil {
 		d.SetId("")
 	}
