@@ -27,7 +27,7 @@ func resourceZoneRecord() *schema.Resource {
 			},
 			"type": {
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
 				Default:  "A",
 			},
 			"address": {
@@ -48,13 +48,13 @@ func resourceZoneRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	zone := d.Get("zone").(string)
 	host := d.Get("name").(string)
 	addr := d.Get("address").(string)
-	resource_type := d.Get("type").(string)
+	record_type := d.Get("type").(string)
 	ttl := strconv.Itoa(d.Get("ttl").(int))
 
-	res, err := c.callAPI2("ZoneEdit", "add_zone_record", map[string]string{
+	_, err := c.callAPI2("ZoneEdit", "add_zone_record", map[string]string{
 		"domain":  zone,
 		"name":    host,
-		"type":    resource_type,
+		"type":    record_type,
 		"address": addr,
 		"ttl":     ttl,
 	})
@@ -62,24 +62,24 @@ func resourceZoneRecordCreate(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
-	cp, ok := res["cpanelresult"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("missing cpanelresult in response")
+	// Fallback: buscar o line manualmente
+	res, err := c.callAPI2("ZoneEdit", "fetchzone_records", map[string]string{
+		"domain": zone,
+	})
+	if err != nil {
+		return fmt.Errorf("registro criado, mas falhou ao buscar line: %v", err)
 	}
-	dataArr, ok := cp["data"].([]interface{})
-	if !ok || len(dataArr) == 0 {
-		return fmt.Errorf("add_zone_record returned empty or invalid data")
+	cp := res["cpanelresult"].(map[string]interface{})
+	dataArr := cp["data"].([]interface{})
+	for _, item := range dataArr {
+		rec := item.(map[string]interface{})
+		if rec["name"] == host+"."+zone+"." && rec["type"] == record_type && rec["address"] == addr {
+			line := int(rec["line"].(float64))
+			d.SetId(fmt.Sprintf("%s:%d", zone, line))
+			return resourceZoneRecordRead(d, meta)
+		}
 	}
-	lineRaw, ok := dataArr[0].(map[string]interface{})["line"]
-	if !ok {
-		return fmt.Errorf("missing line from add_zone_record result")
-	}
-	line, ok := lineRaw.(float64)
-	if !ok {
-		return fmt.Errorf("line is not a float64")
-	}
-	d.SetId(fmt.Sprintf("%s:%d", zone, int(line)))
-	return resourceZoneRecordRead(d, meta)
+	return fmt.Errorf("registro criado mas não foi possível identificar o ID (line)")
 }
 
 func parseZoneRecordID(id string) (zone string, line int, err error) {
