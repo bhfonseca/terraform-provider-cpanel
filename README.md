@@ -1,30 +1,20 @@
-# terraform-provider-cpanel
+# Cpanel Terraform Provider
 
-Terraform provider to manage DNS zone records via cPanel's API.
+The Cpanel Terraform Provider allows you to manage Cpanel accounts and their associated resources using Terraform.
 
-## Requirements
-- Terraform >= 1.0
-- Go >= 1.19
-- A cPanel account with API token and proper permissions (ZoneEdit)
+## Installation
 
-## Install
-```bash
-git clone https://github.com/bhfonseca/terraform-provider-cpanel.git
-cd terraform-provider-cpanel
-go install
-```
+To use this provider, you need to install it. You can do this by adding it to your Terraform configuration.
 
-Place the compiled binary in:
-- Linux/macOS: `~/.terraform.d/plugins/local/custom/cpanel/0.0.1/terraform-provider-cpanel`
-- Windows: `%APPDATA%\terraform.d\plugins\local\custom\cpanel\0.0.1\terraform-provider-cpanel.exe`
+Terraform Configuration
+Add the following to your main.tf file to use the Jumpserver provider:
 
-## Provider Configuration
 ```hcl
 terraform {
   required_providers {
-    cpanel = {
-      source  = "local/custom/cpanel"
-      version = "0.0.1"
+    jumpserver = {
+      source  = "bhfonseca/cpanel"
+      version = "~> 0.0.2-rc1"
     }
   }
 }
@@ -38,19 +28,11 @@ provider "cpanel" {
 ```
 
 ## Resources
-### `cpanel_zone_record`
-Creates a DNS record.
 
-#### Example
-```hcl
-resource "cpanel_zone_record" "www" {
-  zone    = "example.com"
-  name    = "www"
-  type    = "A"
-  address = "192.0.2.1"
-  ttl     = 14400
-}
-```
+This provider supports the following resources:
 
-## License
-MIT © Bruno Honorato da Fonseca
+* `cpanel_zone_record`: Manage DNS zones in Cpanel.
+
+## Resources Definitions
+
+* [DNS Zone](./docs/resources/cpanel_zone_record.md): Manage DNS zones in Cpanel.
