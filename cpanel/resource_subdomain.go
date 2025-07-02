@@ -11,80 +11,53 @@ func resourceSubdomain() *schema.Resource {
 		Read:   resourceSubdomainRead,
 		Delete: resourceSubdomainDelete,
 		Schema: map[string]*schema.Schema{
-			"subdomain": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-			},
-			"root_domain": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-			},
-			"document_root": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-			},
+			"subdomain":     {Type: schema.TypeString, Required: true, ForceNew: true},
+			"root_domain":   {Type: schema.TypeString, Required: true, ForceNew: true},
+			"document_root": {Type: schema.TypeString, Optional: true, ForceNew: true},
 		},
 	}
 }
 
 func resourceSubdomainCreate(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
-
 	sub := d.Get("subdomain").(string)
 	root := d.Get("root_domain").(string)
-
 	dir := d.Get("document_root").(string)
 	if dir == "" {
 		dir = fmt.Sprintf("public_html/%s.%s", sub, root)
 	}
 
-	params := map[string]string{
-		"domain":     sub,
-		"rootdomain": root,
-		"dir":        dir,
-	}
-
-	if _, err := c.callAPI("SubDomain", "addsubdomain", params); err != nil {
+	if _, err := c.callAPI("SubDomain", "addsubdomain", map[string]string{"domain": sub, "rootdomain": root, "dir": dir}); err != nil {
 		return err
 	}
-
 	d.SetId(fmt.Sprintf("%s.%s", sub, root))
 	return resourceSubdomainRead(d, meta)
 }
 
 func resourceSubdomainRead(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
-	full := d.Id()
-
-	res, err := c.callAPI("DomainInfo", "list_domains", map[string]string{})
+	res, err := c.callAPI("DomainInfo", "list_domains", nil)
 	if err != nil {
 		return err
 	}
-
 	data, ok := res["data"].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("formato de resposta inesperado")
+		return fmt.Errorf("unexpected response format")
 	}
-
-	subs, _ := data["sub_domains"].([]interface{})
-	for _, v := range subs {
-		if v.(string) == full {
+	for _, v := range data["sub_domains"].([]interface{}) {
+		if v.(string) == d.Id() {
 			return nil
 		}
 	}
-
 	d.SetId("")
 	return nil
 }
 
 func resourceSubdomainDelete(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
-	if _, err := c.callAPI("SubDomain", "delsubdomain", map[string]string{"domain": d.Id()}); err != nil {
-		return err
+	_, err := c.callAPI2("SubDomain", "delsubdomain", map[string]string{"domain": d.Id()})
+	if err == nil {
+		d.SetId("")
 	}
-	d.SetId("")
-	return nil
+	return err
 }

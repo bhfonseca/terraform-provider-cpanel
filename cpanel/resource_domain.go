@@ -12,54 +12,28 @@ func resourceDomain() *schema.Resource {
 		Read:   resourceDomainRead,
 		Delete: resourceDomainDelete,
 		Schema: map[string]*schema.Schema{
-			"domain": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-			},
-			"subdomain": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
-				ForceNew: true,
-			},
-			"document_root": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-			},
+			"domain":        {Type: schema.TypeString, Required: true, ForceNew: true},
+			"subdomain":     {Type: schema.TypeString, Optional: true, Computed: true, ForceNew: true},
+			"document_root": {Type: schema.TypeString, Optional: true, ForceNew: true},
 		},
 	}
 }
 
 func resourceDomainCreate(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
-
 	domain := d.Get("domain").(string)
 	sub := d.Get("subdomain").(string)
 	if sub == "" {
-		parts := strings.Split(domain, ".")
-		if len(parts) < 2 {
-			return fmt.Errorf("não foi possível derivar o subdomínio, defina explicitamente 'subdomain'")
-		}
-		sub = parts[0]
+		sub = strings.Split(domain, ".")[0]
 	}
-
 	dir := d.Get("document_root").(string)
 	if dir == "" {
 		dir = fmt.Sprintf("public_html/%s", domain)
 	}
 
-	params := map[string]string{
-		"newdomain": domain,
-		"subdomain": sub,
-		"dir":       dir,
-	}
-
-	if _, err := c.callAPI("AddonDomain", "addaddondomain", params); err != nil {
+	if _, err := c.callAPI2("AddonDomain", "addaddondomain", map[string]string{"newdomain": domain, "subdomain": sub, "dir": dir}); err != nil {
 		return err
 	}
-
 	d.SetId(domain)
 	d.Set("subdomain", sub)
 	return resourceDomainRead(d, meta)
@@ -67,34 +41,28 @@ func resourceDomainCreate(d *schema.ResourceData, meta interface{}) error {
 
 func resourceDomainRead(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
-	res, err := c.callAPI("DomainInfo", "list_domains", map[string]string{})
+	res, err := c.callAPI("DomainInfo", "list_domains", nil)
 	if err != nil {
 		return err
 	}
-
 	data, ok := res["data"].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("formato de resposta inesperado")
+		return fmt.Errorf("unexpected response format")
 	}
-
-	addons, _ := data["addon_domains"].([]interface{})
-	wanted := d.Id()
-	for _, v := range addons {
-		if v.(string) == wanted {
+	for _, v := range data["addon_domains"].([]interface{}) {
+		if v.(string) == d.Id() {
 			return nil
 		}
 	}
-
-	// Not found
 	d.SetId("")
 	return nil
 }
 
 func resourceDomainDelete(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
-	if _, err := c.callAPI("AddonDomain", "deladdondomain", map[string]string{"domain": d.Id()}); err != nil {
-		return err
+	_, err := c.callAPI2("AddonDomain", "deladdondomain", map[string]string{"domain": d.Id()})
+	if err == nil {
+		d.SetId("")
 	}
-	d.SetId("")
-	return nil
+	return err
 }

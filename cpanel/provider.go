@@ -8,14 +8,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 func Provider() *schema.Provider {
 	return &schema.Provider{
 		ResourcesMap: map[string]*schema.Resource{
-			"cpanel_domain":      resourceDomain(),
-			"cpanel_subdomain":   resourceSubdomain(),
+			//"cpanel_domain":      resourceDomain(),
+			//"cpanel_subdomain":   resourceSubdomain(),
 			"cpanel_zone_record": resourceZoneRecord(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{},
@@ -100,20 +99,18 @@ func (c *cPanelClient) testConnection() error {
 // callAPI is a helper for UAPI (\"/execute\") endpoints
 func (c *cPanelClient) callAPI(module, function string, params map[string]string) (map[string]interface{}, error) {
 	u := fmt.Sprintf("https://%s:%d/execute/%s/%s", c.host, c.port, module, function)
-
 	if len(params) > 0 {
-		var qs []string
+		q := url.Values{}
 		for k, v := range params {
-			qs = append(qs, fmt.Sprintf("%s=%s", url.QueryEscape(k), url.QueryEscape(v)))
+			q.Set(k, v)
 		}
-		u = fmt.Sprintf("%s?%s", u, strings.Join(qs, "&"))
+		u += "?" + q.Encode()
 	}
 
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, err
 	}
-
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", "cpanel "+c.username+":"+c.api_token)
 
@@ -128,41 +125,36 @@ func (c *cPanelClient) callAPI(module, function string, params map[string]string
 		return nil, err
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
+	var res map[string]interface{}
+	if err := json.Unmarshal(body, &res); err != nil {
 		return nil, err
 	}
-
-	if status, ok := result["status"].(float64); !ok || status != 1 {
-		msg := "erro desconhecido"
-		if errors, ok := result["errors"].([]interface{}); ok && len(errors) > 0 {
-			msg = fmt.Sprintf("%v", errors[0])
+	if status, ok := res["status"].(float64); !ok || status != 1 {
+		msg := "unknown error"
+		if errs, ok := res["errors"].([]interface{}); ok && len(errs) > 0 {
+			msg = fmt.Sprintf("%v", errs[0])
 		}
-		return nil, fmt.Errorf("erro na API do cPanel: %s", msg)
+		return nil, fmt.Errorf("UAPI error: %s", msg)
 	}
-
-	return result, nil
+	return res, nil
 }
 
 // callAPI2 is a helper for legacy cPanel API2 (\"/json-api/cpanel\") endpoints
 func (c *cPanelClient) callAPI2(module, function string, params map[string]string) (map[string]interface{}, error) {
-	qs := url.Values{}
-	qs.Set("cpanel_jsonapi_user", c.username)
-	qs.Set("cpanel_jsonapi_apiversion", "2")
-	qs.Set("cpanel_jsonapi_module", module)
-	qs.Set("cpanel_jsonapi_func", function)
-
+	q := url.Values{}
+	q.Set("cpanel_jsonapi_user", c.username)
+	q.Set("cpanel_jsonapi_apiversion", "2")
+	q.Set("cpanel_jsonapi_module", module)
+	q.Set("cpanel_jsonapi_func", function)
 	for k, v := range params {
-		qs.Set(k, v)
+		q.Set(k, v)
 	}
 
-	u := fmt.Sprintf("https://%s:%d/json-api/cpanel?%s", c.host, c.port, qs.Encode())
-
+	u := fmt.Sprintf("https://%s:%d/json-api/cpanel?%s", c.host, c.port, q.Encode())
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, err
 	}
-
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", "cpanel "+c.username+":"+c.api_token)
 
@@ -177,24 +169,22 @@ func (c *cPanelClient) callAPI2(module, function string, params map[string]strin
 		return nil, err
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
+	var res map[string]interface{}
+	if err := json.Unmarshal(body, &res); err != nil {
 		return nil, err
 	}
 
-	cr, ok := result["cpanelresult"].(map[string]interface{})
+	cp, ok := res["cpanelresult"].(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("formato de resposta inesperado")
+		return nil, fmt.Errorf("unexpected response format")
 	}
-
-	if event, ok := cr["event"].(map[string]interface{}); ok {
-		if res, ok := event["result"].(float64); ok && res == 1 {
-			return result, nil
+	if ev, ok := cp["event"].(map[string]interface{}); ok {
+		if r, _ := ev["result"].(float64); r == 1 {
+			return res, nil
 		}
-		if reason, ok := event["reason"].(string); ok {
-			return nil, fmt.Errorf("erro na API2 do cPanel: %s", reason)
+		if reason, ok := ev["reason"].(string); ok {
+			return nil, fmt.Errorf("API2 error: %s", reason)
 		}
 	}
-
-	return nil, fmt.Errorf("chamada API2 retornou falha")
+	return nil, fmt.Errorf("API2 unknown failure")
 }
