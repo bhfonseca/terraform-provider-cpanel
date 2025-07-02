@@ -84,61 +84,17 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 	return client, nil
 }
 
-//	func (c *cPanelClient) testConnection() error {
-//		_, err := c.callAPI2("ZoneEdit", "fetchzone_records", map[string]string{"domain": "example.com"})
-//		return err
-//	}
-//
-// testConnection validates that the credentials work by fetching the cPanel version
 func (c *cPanelClient) testConnection() error {
-	_, err := c.callAPI("DomainInfo", "list_domains", nil)
+	_, err := c.callAPI2("ZoneEdit", "fetchzone_records", map[string]string{"domain": "example.com"})
 	return err
 }
 
-// callAPI is a helper for UAPI (\"/execute\") endpoints
-func (c *cPanelClient) callAPI(module, function string, params map[string]string) (map[string]interface{}, error) {
-	u := fmt.Sprintf("https://%s:%d/execute/%s/%s", c.host, c.port, module, function)
-	if len(params) > 0 {
-		q := url.Values{}
-		for k, v := range params {
-			q.Set(k, v)
-		}
-		u += "?" + q.Encode()
-	}
+// testConnection validates that the credentials work by fetching the cPanel version
+//func (c *cPanelClient) testConnection() error {
+//	_, err := c.callAPI("DomainInfo", "list_domains", nil)
+//	return err
+//}
 
-	req, err := http.NewRequest("GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Accept", "application/json")
-	req.Header.Add("Authorization", "cpanel "+c.username+":"+c.api_token)
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var res map[string]interface{}
-	if err := json.Unmarshal(body, &res); err != nil {
-		return nil, err
-	}
-	if status, ok := res["status"].(float64); !ok || status != 1 {
-		msg := "unknown error"
-		if errs, ok := res["errors"].([]interface{}); ok && len(errs) > 0 {
-			msg = fmt.Sprintf("%v", errs[0])
-		}
-		return nil, fmt.Errorf("UAPI error: %s", msg)
-	}
-	return res, nil
-}
-
-// callAPI2 is a helper for legacy cPanel API2 (\"/json-api/cpanel\") endpoints
 func (c *cPanelClient) callAPI2(module, function string, params map[string]string) (map[string]interface{}, error) {
 	q := url.Values{}
 	q.Set("cpanel_jsonapi_user", c.username)
@@ -148,7 +104,6 @@ func (c *cPanelClient) callAPI2(module, function string, params map[string]strin
 	for k, v := range params {
 		q.Set(k, v)
 	}
-
 	u := fmt.Sprintf("https://%s:%d/json-api/cpanel?%s", c.host, c.port, q.Encode())
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {

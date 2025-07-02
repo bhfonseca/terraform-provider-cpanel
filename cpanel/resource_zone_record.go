@@ -14,15 +14,30 @@ func resourceZoneRecord() *schema.Resource {
 		Update: resourceZoneRecordUpdate,
 		Delete: resourceZoneRecordDelete,
 		Schema: map[string]*schema.Schema{
-			"zone":    {Type: schema.TypeString, Required: true, ForceNew: true},
-			"name":    {Type: schema.TypeString, Required: true, ForceNew: true, Description: "@ para raiz ou hostname sem o domínio"},
-			"address": {Type: schema.TypeString, Required: true},
-			"ttl":     {Type: schema.TypeInt, Optional: true, Default: 14400},
+			"zone": {
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+			},
+			"name": {
+				Type:        schema.TypeString,
+				Required:    true,
+				ForceNew:    true,
+				Description: "@ para raiz ou hostname sem o domínio",
+			},
+			"address": {
+				Type:     schema.TypeString,
+				Required: true,
+			},
+			"ttl": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  14400,
+			},
 		},
 	}
 }
 
-// Helper to build FQDN
 func fqdn(name, zone string) string {
 	if name == "@" || name == zone {
 		return zone
@@ -33,7 +48,6 @@ func fqdn(name, zone string) string {
 	return name + "." + zone
 }
 
-// Create
 func resourceZoneRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
 	zone := d.Get("zone").(string)
@@ -62,7 +76,6 @@ func resourceZoneRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	return resourceZoneRecordRead(d, meta)
 }
 
-// Helpers
 func parseZoneRecordID(id string) (zone string, line int, err error) {
 	parts := strings.Split(id, ":")
 	if len(parts) != 2 {
@@ -75,7 +88,6 @@ func parseZoneRecordID(id string) (zone string, line int, err error) {
 	return parts[0], l, nil
 }
 
-// Read
 func resourceZoneRecordRead(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
 	zone, line, err := parseZoneRecordID(d.Id())
@@ -95,9 +107,10 @@ func resourceZoneRecordRead(d *schema.ResourceData, meta interface{}) error {
 		d.SetId("")
 		return nil
 	}
-
 	rec := dataArr[0].(map[string]interface{})
-	d.Set("address", rec["address"].(string))
+	if addr, ok := rec["address"].(string); ok {
+		d.Set("address", addr)
+	}
 	if ttl, ok := rec["ttl"].(float64); ok {
 		d.Set("ttl", int(ttl))
 	}
@@ -135,7 +148,6 @@ func resourceZoneRecordDelete(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		return err
 	}
-
 	_, err = c.callAPI2("ZoneEdit", "remove_zone_record", map[string]string{
 		"domain": zone,
 		"line":   strconv.Itoa(line),
