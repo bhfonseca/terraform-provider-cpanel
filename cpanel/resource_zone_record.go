@@ -25,6 +25,11 @@ func resourceZoneRecord() *schema.Resource {
 				ForceNew:    true,
 				Description: "@ para raiz ou hostname sem o domínio",
 			},
+			"type": {
+				Type:     schema.TypeString,
+				Required: true,
+				Default:  "A",
+			},
 			"address": {
 				Type:     schema.TypeString,
 				Required: true,
@@ -38,27 +43,18 @@ func resourceZoneRecord() *schema.Resource {
 	}
 }
 
-func fqdn(name, zone string) string {
-	if name == "@" || name == zone {
-		return zone
-	}
-	if strings.HasSuffix(name, "."+zone) {
-		return name
-	}
-	return name + "." + zone
-}
-
 func resourceZoneRecordCreate(d *schema.ResourceData, meta interface{}) error {
 	c := meta.(*cPanelClient)
 	zone := d.Get("zone").(string)
-	host := fqdn(d.Get("name").(string), zone)
+	host := d.Get("name").(string)
 	addr := d.Get("address").(string)
+	resource_type := d.Get("type").(string)
 	ttl := strconv.Itoa(d.Get("ttl").(int))
 
 	res, err := c.callAPI2("ZoneEdit", "add_zone_record", map[string]string{
 		"domain":  zone,
 		"name":    host,
-		"type":    "A",
+		"type":    resource_type,
 		"address": addr,
 		"ttl":     ttl,
 	})
@@ -66,13 +62,23 @@ func resourceZoneRecordCreate(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
-	cp := res["cpanelresult"].(map[string]interface{})
-	dataArr := cp["data"].([]interface{})
-	if len(dataArr) == 0 {
-		return fmt.Errorf("add_zone_record returned empty data")
+	cp, ok := res["cpanelresult"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("missing cpanelresult in response")
 	}
-	line := int(dataArr[0].(map[string]interface{})["line"].(float64))
-	d.SetId(fmt.Sprintf("%s:%d", zone, line))
+	dataArr, ok := cp["data"].([]interface{})
+	if !ok || len(dataArr) == 0 {
+		return fmt.Errorf("add_zone_record returned empty or invalid data")
+	}
+	lineRaw, ok := dataArr[0].(map[string]interface{})["line"]
+	if !ok {
+		return fmt.Errorf("missing line from add_zone_record result")
+	}
+	line, ok := lineRaw.(float64)
+	if !ok {
+		return fmt.Errorf("line is not a float64")
+	}
+	d.SetId(fmt.Sprintf("%s:%d", zone, int(line)))
 	return resourceZoneRecordRead(d, meta)
 }
 
