@@ -3,6 +3,7 @@ package cpanel
 import (
 	"fmt"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"strconv"
 	"strings"
 )
@@ -23,12 +24,15 @@ func resourceZoneRecord() *schema.Resource {
 				Type:        schema.TypeString,
 				Required:    true,
 				ForceNew:    true,
-				Description: "@ para raiz ou hostname sem o domínio",
+				Description: "@ for root domain, subdomain for others",
 			},
 			"type": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  "A",
+				ValidateFunc: validation.StringInSlice([]string{
+					"A", "AAAA", "CNAME", "TXT", "MX", "SRV", "NS", "PTR",
+				}, false),
 			},
 			"address": {
 				Type:     schema.TypeString,
