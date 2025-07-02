@@ -89,12 +89,6 @@ func (c *cPanelClient) testConnection() error {
 	return err
 }
 
-// testConnection validates that the credentials work by fetching the cPanel version
-//func (c *cPanelClient) testConnection() error {
-//	_, err := c.callAPI("DomainInfo", "list_domains", nil)
-//	return err
-//}
-
 func (c *cPanelClient) callAPI2(module, function string, params map[string]string) (map[string]interface{}, error) {
 	q := url.Values{}
 	q.Set("cpanel_jsonapi_user", c.username)
