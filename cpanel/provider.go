@@ -14,8 +14,9 @@ import (
 func Provider() *schema.Provider {
 	return &schema.Provider{
 		ResourcesMap: map[string]*schema.Resource{
-			"cpanel_domain":    resourceDomain(),
-			"cpanel_subdomain": resourceSubdomain(),
+			"cpanel_domain":      resourceDomain(),
+			"cpanel_subdomain":   resourceSubdomain(),
+			"cpanel_zone_record": resourceZoneRecord(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{},
 		Schema: map[string]*schema.Schema{
@@ -92,7 +93,7 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 
 // testConnection validates that the credentials work by fetching the cPanel version
 func (c *cPanelClient) testConnection() error {
-	_, err := c.callAPI("SystemInfo", "getversion", map[string]string{})
+	_, err := c.callAPI("SystemInfo", "getversion", nil)
 	return err
 }
 
